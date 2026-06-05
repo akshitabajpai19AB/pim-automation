@@ -19,6 +19,18 @@ jobs:
 
     steps:
 
+      - name: Assign Issue to Manager
+        uses: actions/github-script@v7
+        with:
+          script: |
+
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              assignees: ['akshitabajpai19AB']
+            });
+
       - name: Add Approval Comment
         uses: actions/github-script@v7
         with:
@@ -28,5 +40,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body: `✅ PIM Request Created\n\nManager can approve using:\n\n/approve\n\nOR reject using:\n\n/reject`
+              body: `@akshitabajpai19AB ✅ PIM Request Created\n\nManager can approve using:\n\n/approve\n\nOR reject using:\n\n/reject`
               });
