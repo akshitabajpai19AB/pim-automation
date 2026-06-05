@@ -2,7 +2,7 @@ name: PIM Request Created
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [opened]
 
 permissions:
   issues: write
@@ -10,10 +10,6 @@ permissions:
 jobs:
 
   process-request:
-
-    if: |
-      contains(github.event.issue.labels.*.name, 'pim-request') ||
-      contains(github.event.issue.labels.*.name, 'PIM REQUEST')
 
     runs-on: ubuntu-latest
 
