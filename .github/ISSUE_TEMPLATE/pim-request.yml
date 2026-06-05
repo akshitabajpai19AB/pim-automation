@@ -47,10 +47,34 @@ body:
       required: true
 
   - type: input
-    id: duration
+    id: start_date_time
     attributes:
-      label: Duration Hours
-      placeholder: "8"
+      label: Start Date & Time
+      description: When access should begin (e.g., 2025-12-08 08:00)
+    validations:
+      required: true
+
+  - type: input
+    id: end_date_time
+    attributes:
+      label: End Date & Time
+      description: When access should expire (e.g., 2025-12-10 19:00)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: timezone
+    attributes:
+      label: Timezone
+      description: Select your timezone
+      options:
+        - IST (UTC+5:30)
+        - WIB - Indonesia (UTC+7)
+        - ICT - Thailand (UTC+7)
+        - MYT - Malaysia (UTC+8)
+        - SGT - Singapore (UTC+8)
+        - WITA - Indonesia (UTC+8)
+        - WIT - Indonesia (UTC+9)
     validations:
       required: true
 
