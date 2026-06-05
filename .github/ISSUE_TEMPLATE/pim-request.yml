@@ -14,6 +14,7 @@ body:
     id: email
     attributes:
       label: User Email
+      placeholder: user@company.com
     validations:
       required: true
 
@@ -21,10 +22,18 @@ body:
     id: role
     attributes:
       label: Azure Role
+      description: Select the Azure role required
       options:
         - Reader
         - Contributor
+        - Owner
         - Key Vault Administrator
+        - Key Vault Secrets Officer
+        - User Access Administrator
+        - Storage Blob Data Contributor
+        - Storage Blob Data Reader
+        - Virtual Machine Contributor
+        - Network Contributor
     validations:
       required: true
 
@@ -32,7 +41,8 @@ body:
     id: scope
     attributes:
       label: Scope
-      placeholder: /subscriptions/xxxxxxxx
+      description: Enter Azure scope
+      placeholder: /subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     validations:
       required: true
 
@@ -48,5 +58,6 @@ body:
     id: justification
     attributes:
       label: Business Justification
+      description: Explain why access is needed
     validations:
       required: true
