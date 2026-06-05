@@ -46,9 +46,10 @@ jobs:
 
             core.setOutput("scope", getField("Scope"));
             core.setOutput("role", getField("Azure Role"));
-            core.setOutput("start_date_time", getField("Start Date & Time"));
-            core.setOutput("end_date_time", getField("End Date & Time"));
-            core.setOutput("timezone", getField("Timezone"));
+            core.setOutput("activation_type", getField("Activation Type"));
+            core.setOutput("start_date_time", getField("Start Date & Time (for Scheduled only)"));
+            core.setOutput("end_date_time", getField("End Date & Time (for Scheduled only)"));
+            core.setOutput("timezone", getField("Timezone (for Scheduled only)"));
 
       - name: Map Role Definition ID
         id: rolemap
@@ -80,8 +81,9 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Convert Timezone to UTC
+      - name: Convert Timezone to UTC (if Scheduled)
         id: utctime
+        if: contains(steps.issue.outputs.activation_type, 'Scheduled')
         uses: actions/github-script@v7
         with:
           script: |
@@ -123,31 +125,64 @@ jobs:
       - name: Create PIM Request Body
         run: |
 
-          cat > body.json <<EOF
-          {
-            "properties": {
-              "principalId":
-                "${{ secrets.USER_OBJECT_ID }}",
+          ACTIVATION_TYPE="${{ steps.issue.outputs.activation_type }}"
 
-              "requestType":
-                "SelfActivate",
+          if [ "$ACTIVATION_TYPE" = "Immediate" ]; then
 
-              "roleDefinitionId":
-                "${{ steps.issue.outputs.scope }}/providers/Microsoft.Authorization/roleDefinitions/${{ env.ROLE_ID }}",
+            cat > body.json <<EOF
+            {
+              "properties": {
+                "principalId":
+                  "${{ secrets.USER_OBJECT_ID }}",
 
-              "justification":
-                "Approved through GitHub",
+                "requestType":
+                  "SelfActivate",
 
-              "scheduleInfo": {
-                "startDateTime": "${{ steps.utctime.outputs.start_utc }}",
-                "expiration": {
-                  "type": "AfterDateTime",
-                  "endDateTime": "${{ steps.utctime.outputs.end_utc }}"
+                "roleDefinitionId":
+                  "${{ steps.issue.outputs.scope }}/providers/Microsoft.Authorization/roleDefinitions/${{ env.ROLE_ID }}",
+
+                "justification":
+                  "Approved through GitHub",
+
+                "scheduleInfo": {
+                  "expiration": {
+                    "type": "AfterDuration",
+                    "duration": "PT8H"
+                  }
                 }
               }
             }
-          }
-          EOF
+            EOF
+
+          else
+
+            cat > body.json <<EOF
+            {
+              "properties": {
+                "principalId":
+                  "${{ secrets.USER_OBJECT_ID }}",
+
+                "requestType":
+                  "SelfActivate",
+
+                "roleDefinitionId":
+                  "${{ steps.issue.outputs.scope }}/providers/Microsoft.Authorization/roleDefinitions/${{ env.ROLE_ID }}",
+
+                "justification":
+                  "Approved through GitHub",
+
+                "scheduleInfo": {
+                  "startDateTime": "${{ steps.utctime.outputs.start_utc }}",
+                  "expiration": {
+                    "type": "AfterDateTime",
+                    "endDateTime": "${{ steps.utctime.outputs.end_utc }}"
+                  }
+                }
+              }
+            }
+            EOF
+
+          fi
 
       - name: Activate PIM
         run: |
@@ -162,12 +197,20 @@ jobs:
         with:
           script: |
 
+            const activationType = "${{ steps.issue.outputs.activation_type }}";
+            let message = "";
+
+            if (activationType === "Immediate") {
+              message = "✅ PIM Access Approved and Activated Immediately (8 hours)";
+            } else {
+              message = "✅ PIM Access Approved and Scheduled for Activation\n\nStart: ${{ steps.issue.outputs.start_date_time }}\nEnd: ${{ steps.issue.outputs.end_date_time }}\nTimezone: ${{ steps.issue.outputs.timezone }}";
+            }
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body:
-              '✅ PIM Access Approved and Activated Successfully.'
+              body: message
             });
 
       - name: Add Approved and Completed Labels

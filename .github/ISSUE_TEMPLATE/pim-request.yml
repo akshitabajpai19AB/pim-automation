@@ -46,27 +46,38 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: activation_type
+    attributes:
+      label: Activation Type
+      description: Choose when to activate PIM access
+      options:
+        - Immediate
+        - Scheduled
+    validations:
+      required: true
+
   - type: input
     id: start_date_time
     attributes:
-      label: Start Date & Time
-      description: When access should begin (e.g., 2025-12-08 08:00)
+      label: Start Date & Time (for Scheduled only)
+      description: When access should begin (e.g., 2025-12-08 08:00). Leave empty for Immediate.
     validations:
-      required: true
+      required: false
 
   - type: input
     id: end_date_time
     attributes:
-      label: End Date & Time
-      description: When access should expire (e.g., 2025-12-10 19:00)
+      label: End Date & Time (for Scheduled only)
+      description: When access should expire (e.g., 2025-12-10 19:00). Leave empty for Immediate.
     validations:
-      required: true
+      required: false
 
   - type: dropdown
     id: timezone
     attributes:
-      label: Timezone
-      description: Select your timezone
+      label: Timezone (for Scheduled only)
+      description: Select your timezone (required for Scheduled only)
       options:
         - IST (UTC+5:30)
         - WIB - Indonesia (UTC+7)
@@ -76,7 +87,7 @@ body:
         - WITA - Indonesia (UTC+8)
         - WIT - Indonesia (UTC+9)
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: justification
