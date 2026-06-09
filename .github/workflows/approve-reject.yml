@@ -44,39 +44,90 @@ jobs:
               return match ? match[1].trim() : "";
             }
 
-            core.setOutput("scope", getField("Scope"));
-            core.setOutput("role", getField("Azure Role"));
-            core.setOutput("principal_type", getField("Principal Type"));
             core.setOutput("email", getField("User Email"));
-            core.setOutput("group_name", getField("Group Name or Group ID"));
-            core.setOutput("common_groups", getField("Common RBAC Groups (Optional)"));
+            core.setOutput("group_assignment", getField("Group Assignment"));
+            core.setOutput("scope", getField("Scope"));
             core.setOutput("activation_type", getField("Activation Type"));
             core.setOutput("start_date_time", getField("Start Date & Time (for Scheduled only)"));
             core.setOutput("end_date_time", getField("End Date & Time (for Scheduled only)"));
             core.setOutput("timezone", getField("Timezone (for Scheduled only)"));
 
-      - name: Map Role Definition ID
-        id: rolemap
+      - name: Check User Request Limit
+        id: requestlimit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const userEmail = "${{ steps.issue.outputs.email }}";
+            
+            // Get all closed issues with approved label
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              labels: 'approved,pim-request',
+              per_page: 100
+            });
+
+            // Count approved requests for this user
+            let approvedCount = 0;
+            let userRequestIds = [];
+
+            for (const issue of issues.data) {
+              const regex = /### User Email\s*\n(\S+)/;
+              const match = issue.body.match(regex);
+              if (match && match[1].trim() === userEmail.trim()) {
+                approvedCount++;
+                userRequestIds.push(issue.number);
+              }
+            }
+
+            core.setOutput("approved_count", approvedCount);
+            core.setOutput("user_request_ids", userRequestIds.join(', '));
+
+            if (approvedCount >= 2) {
+              core.setFailed(`User ${userEmail} has reached the maximum limit of 2 approved PIM requests. Previous requests: ${userRequestIds.join(', ')}`);
+            }
+
+      - name: Map Group to Roles
+        id: grouproles
         run: |
 
-          ROLE="${{ steps.issue.outputs.role }}"
+          GROUP="${{ steps.issue.outputs.group_assignment }}"
 
-          if [ "$ROLE" = "Reader" ]; then
-            echo "ROLE_ID=acdd72a7-3385-48ef-bd42-f606fba81ae7" >> $GITHUB_ENV
-
-          elif [ "$ROLE" = "Contributor" ]; then
-            echo "ROLE_ID=b24988ac-6180-42a0-ab88-20f7382dd24c" >> $GITHUB_ENV
-
-          elif [ "$ROLE" = "Owner" ]; then
-            echo "ROLE_ID=8e3af657-a8ff-443c-a75c-2fe8c4bcb635" >> $GITHUB_ENV
-
-          elif [ "$ROLE" = "Key Vault Administrator" ]; then
-            echo "ROLE_ID=00482a5a-887f-4fb3-b363-3b7fe8e74483" >> $GITHUB_ENV
-
-          else
-            echo "Unsupported Azure role"
-            exit 1
-          fi
+          case "$GROUP" in
+            "Platform Engineering Team")
+              echo "ROLE_IDS=acdd72a7-3385-48ef-bd42-f606fba81ae7,b24988ac-6180-42a0-ab88-20f7382dd24c" >> $GITHUB_ENV
+              echo "ROLE_NAMES=Reader,Contributor" >> $GITHUB_ENV
+              ;;
+            "Cloud Operations Team")
+              echo "ROLE_IDS=b24988ac-6180-42a0-ab88-20f7382dd24c" >> $GITHUB_ENV
+              echo "ROLE_NAMES=Contributor" >> $GITHUB_ENV
+              ;;
+            "Security Team")
+              echo "ROLE_IDS=8e3af657-a8ff-443c-a75c-2fe8c4bcb635" >> $GITHUB_ENV
+              echo "ROLE_NAMES=Owner" >> $GITHUB_ENV
+              ;;
+            "Infrastructure Team")
+              echo "ROLE_IDS=b24988ac-6180-42a0-ab88-20f7382dd24c" >> $GITHUB_ENV
+              echo "ROLE_NAMES=Contributor" >> $GITHUB_ENV
+              ;;
+            "Application Development Team")
+              echo "ROLE_IDS=acdd72a7-3385-48ef-bd42-f606fba81ae7" >> $GITHUB_ENV
+              echo "ROLE_NAMES=Reader" >> $GITHUB_ENV
+              ;;
+            "Data Engineering Team")
+              echo "ROLE_IDS=acdd72a7-3385-48ef-bd42-f606fba81ae7,b24988ac-6180-42a0-ab88-20f7382dd24c" >> $GITHUB_ENV
+              echo "ROLE_NAMES=Reader,Contributor" >> $GITHUB_ENV
+              ;;
+            "DevOps Team")
+              echo "ROLE_IDS=b24988ac-6180-42a0-ab88-20f7382dd24c" >> $GITHUB_ENV
+              echo "ROLE_NAMES=Contributor" >> $GITHUB_ENV
+              ;;
+            *)
+              echo "Unknown group: $GROUP"
+              exit 1
+              ;;
+          esac
 
       - name: Azure Login
         uses: azure/login@v2
@@ -85,35 +136,19 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Resolve Principal Object ID
-        id: principal
+      - name: Resolve User Object ID
+        id: userobj
         run: |
-          PRINCIPAL_TYPE="${{ steps.issue.outputs.principal_type }}"
-          PRINCIPAL_ID=""
 
-          if [ "$PRINCIPAL_TYPE" = "User" ]; then
-            EMAIL="${{ steps.issue.outputs.email }}"
-            PRINCIPAL_ID=$(az ad user show --id "$EMAIL" --query id -o tsv 2>/dev/null)
-            if [ -z "$PRINCIPAL_ID" ]; then
-              echo "Error: Unable to find user with email $EMAIL"
-              exit 1
-            fi
-          elif [ "$PRINCIPAL_TYPE" = "Security Group" ]; then
-            GROUP_IDENTIFIER="${{ steps.issue.outputs.group_name }}"
-            if [ -z "$GROUP_IDENTIFIER" ]; then
-              GROUP_IDENTIFIER="${{ steps.issue.outputs.common_groups }}"
-            fi
-            PRINCIPAL_ID=$(az ad group show --group "$GROUP_IDENTIFIER" --query id -o tsv 2>/dev/null)
-            if [ -z "$PRINCIPAL_ID" ]; then
-              echo "Error: Unable to find group with identifier $GROUP_IDENTIFIER"
-              exit 1
-            fi
-          else
-            echo "Error: Unknown principal type $PRINCIPAL_TYPE"
+          EMAIL="${{ steps.issue.outputs.email }}"
+          USER_ID=$(az ad user show --id "$EMAIL" --query id -o tsv 2>/dev/null)
+
+          if [ -z "$USER_ID" ]; then
+            echo "Error: Unable to find user with email $EMAIL"
             exit 1
           fi
 
-          echo "PRINCIPAL_OBJECT_ID=$PRINCIPAL_ID" >> $GITHUB_ENV
+          echo "USER_OBJECT_ID=$USER_ID" >> $GITHUB_ENV
 
       - name: Convert Timezone to UTC (if Scheduled)
         id: utctime
@@ -153,6 +188,18 @@ jobs:
             const startUtc = new Date(startLocal.getTime() - offsetMs);
             const endUtc = new Date(endLocal.getTime() - offsetMs);
 
+            // Validate duration does not exceed 4 hours
+            const durationMs = endUtc.getTime() - startUtc.getTime();
+            const durationHours = durationMs / (1000 * 60 * 60);
+
+            if (durationHours > 4) {
+              throw new Error(`PIM access duration cannot exceed 4 hours. Requested: ${durationHours.toFixed(2)} hours`);
+            }
+
+            if (durationHours <= 0) {
+              throw new Error(`End date/time must be after start date/time`);
+            }
+
             core.setOutput("start_utc", startUtc.toISOString());
             core.setOutput("end_utc", endUtc.toISOString());
 
@@ -160,71 +207,75 @@ jobs:
         run: |
 
           ACTIVATION_TYPE="${{ steps.issue.outputs.activation_type }}"
+          ROLE_IDS="${{ env.ROLE_IDS }}"
+          USER_ID="${{ env.USER_OBJECT_ID }}"
+          SCOPE="${{ steps.issue.outputs.scope }}"
 
-          if [ "$ACTIVATION_TYPE" = "Immediate" ]; then
+          IFS=',' read -ra ROLES <<< "$ROLE_IDS"
+          
+          for ROLE_ID in "${ROLES[@]}"; do
+            ROLE_ID=$(echo $ROLE_ID | xargs)
 
-            cat > body.json <<EOF
-            {
-              "properties": {
-                "principalId":
-                  "${{ env.PRINCIPAL_OBJECT_ID }}",
+            if [ "$ACTIVATION_TYPE" = "Immediate" ]; then
 
-                "requestType":
-                  "SelfActivate",
-
-                "roleDefinitionId":
-                  "${{ steps.issue.outputs.scope }}/providers/Microsoft.Authorization/roleDefinitions/${{ env.ROLE_ID }}",
-
-                "justification":
-                  "Approved through GitHub",
-
-                "scheduleInfo": {
-                  "expiration": {
-                    "type": "AfterDuration",
-                    "duration": "PT8H"
+              cat > "body_${ROLE_ID}.json" <<EOF
+              {
+                "properties": {
+                  "principalId": "$USER_ID",
+                  "requestType": "SelfActivate",
+                  "roleDefinitionId": "$SCOPE/providers/Microsoft.Authorization/roleDefinitions/$ROLE_ID",
+                  "justification": "Approved through GitHub",
+                  "scheduleInfo": {
+                    "expiration": {
+                      "type": "AfterDuration",
+                      "duration": "PT4H"
+                    }
                   }
                 }
               }
-            }
-            EOF
+              EOF
 
-          else
+            else
 
-            cat > body.json <<EOF
-            {
-              "properties": {
-                "principalId":
-                  "${{ env.PRINCIPAL_OBJECT_ID }}",
-
-                "requestType":
-                  "SelfActivate",
-
-                "roleDefinitionId":
-                  "${{ steps.issue.outputs.scope }}/providers/Microsoft.Authorization/roleDefinitions/${{ env.ROLE_ID }}",
-
-                "justification":
-                  "Approved through GitHub",
-
-                "scheduleInfo": {
-                  "startDateTime": "${{ steps.utctime.outputs.start_utc }}",
-                  "expiration": {
-                    "type": "AfterDateTime",
-                    "endDateTime": "${{ steps.utctime.outputs.end_utc }}"
+              cat > "body_${ROLE_ID}.json" <<EOF
+              {
+                "properties": {
+                  "principalId": "$USER_ID",
+                  "requestType": "SelfActivate",
+                  "roleDefinitionId": "$SCOPE/providers/Microsoft.Authorization/roleDefinitions/$ROLE_ID",
+                  "justification": "Approved through GitHub",
+                  "scheduleInfo": {
+                    "startDateTime": "${{ steps.utctime.outputs.start_utc }}",
+                    "expiration": {
+                      "type": "AfterDateTime",
+                      "endDateTime": "${{ steps.utctime.outputs.end_utc }}"
+                    }
                   }
                 }
               }
-            }
-            EOF
+              EOF
 
-          fi
+            fi
+          done
 
       - name: Activate PIM
         run: |
 
-          az rest \
-            --method PUT \
-            --uri "https://management.azure.com${{ steps.issue.outputs.scope }}/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/$(uuidgen)?api-version=2020-10-01" \
-            --body @body.json
+          ROLE_IDS="${{ env.ROLE_IDS }}"
+          SCOPE="${{ steps.issue.outputs.scope }}"
+
+          IFS=',' read -ra ROLES <<< "$ROLE_IDS"
+          
+          for ROLE_ID in "${ROLES[@]}"; do
+            ROLE_ID=$(echo $ROLE_ID | xargs)
+
+            az rest \
+              --method PUT \
+              --uri "https://management.azure.com$SCOPE/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/$(uuidgen)?api-version=2020-10-01" \
+              --body @"body_${ROLE_ID}.json"
+
+            echo "PIM request created for role: $ROLE_ID"
+          done
 
       - name: Comment Approved
         uses: actions/github-script@v7
@@ -232,14 +283,15 @@ jobs:
           script: |
 
             const activationType = "${{ steps.issue.outputs.activation_type }}";
-            const principalType = "${{ steps.issue.outputs.principal_type }}";
-            const principalIdentifier = principalType === "User" ? "${{ steps.issue.outputs.email }}" : ("${{ steps.issue.outputs.group_name }}" || "${{ steps.issue.outputs.common_groups }}");
+            const groupAssignment = "${{ steps.issue.outputs.group_assignment }}";
+            const userEmail = "${{ steps.issue.outputs.email }}";
+            const roleNames = "${{ env.ROLE_NAMES }}";
             let message = "";
 
             if (activationType === "Immediate") {
-              message = `✅ PIM Access Approved and Activated Immediately (8 hours)\n\n**Principal Type:** ${principalType}\n**Principal:** ${principalIdentifier}\n**Role:** ${{ steps.issue.outputs.role }}`;
+              message = `✅ PIM Access Approved and Activated Immediately (4 hours)\n\n**User Email:** ${userEmail}\n**Group Assignment:** ${groupAssignment}\n**Roles Assigned:** ${roleNames}`;
             } else {
-              message = `✅ PIM Access Approved and Scheduled for Activation\n\n**Principal Type:** ${principalType}\n**Principal:** ${principalIdentifier}\n**Role:** ${{ steps.issue.outputs.role }}\n\n**Start:** ${{ steps.issue.outputs.start_date_time }}\n**End:** ${{ steps.issue.outputs.end_date_time }}\n**Timezone:** ${{ steps.issue.outputs.timezone }}`;
+              message = `✅ PIM Access Approved and Scheduled for Activation\n\n**User Email:** ${userEmail}\n**Group Assignment:** ${groupAssignment}\n**Roles Assigned:** ${roleNames}\n\n**Start:** ${{ steps.issue.outputs.start_date_time }}\n**End:** ${{ steps.issue.outputs.end_date_time }}\n**Timezone:** ${{ steps.issue.outputs.timezone }}`;
             }
 
             await github.rest.issues.createComment({

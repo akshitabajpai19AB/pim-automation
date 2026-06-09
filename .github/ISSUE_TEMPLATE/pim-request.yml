@@ -10,42 +10,33 @@ labels:
 
 body:
 
-  - type: dropdown
-    id: principal_type
+  - type: markdown
     attributes:
-      label: Principal Type
-      description: Select whether this is for a User or a Security Group
-      options:
-        - User
-        - Security Group
-    validations:
-      required: true
+      value: |
+        ## ⚠️ PIM Access Request Limits
+        
+        - **Maximum Requests:** 2 approved requests per user
+        - **Duration Limit:** Each request is limited to 4 hours maximum
+        - **Immediate Activation:** 4 hours access
+        - **Scheduled Activation:** Up to 4 hours from start to end time
+        
+        Once you have 2 approved active requests, you cannot create new requests until previous ones expire.
 
   - type: input
     id: email
     attributes:
       label: User Email
-      description: Email address of the user requiring access
+      description: Your email address
       placeholder: user@company.com
     validations:
-      required: false
-
-  - type: input
-    id: group_name
-    attributes:
-      label: Group Name or Group ID
-      description: Name or ObjectId of the Azure AD Security Group
-      placeholder: group-name or 00000000-0000-0000-0000-000000000000
-    validations:
-      required: false
+      required: true
 
   - type: dropdown
-    id: common_groups
+    id: group_assignment
     attributes:
-      label: Common RBAC Groups (Optional)
-      description: Select from common security groups if applicable
+      label: Group Assignment
+      description: Select the group you belong to (roles are pre-configured per group)
       options:
-        - None - Using custom group
         - Platform Engineering Team
         - Cloud Operations Team
         - Security Team
@@ -53,25 +44,6 @@ body:
         - Application Development Team
         - Data Engineering Team
         - DevOps Team
-    validations:
-      required: false
-
-  - type: dropdown
-    id: role
-    attributes:
-      label: Azure Role
-      description: Select the Azure role required
-      options:
-        - Reader
-        - Contributor
-        - Owner
-        - Key Vault Administrator
-        - Key Vault Secrets Officer
-        - User Access Administrator
-        - Storage Blob Data Contributor
-        - Storage Blob Data Reader
-        - Virtual Machine Contributor
-        - Network Contributor
     validations:
       required: true
 
@@ -102,14 +74,22 @@ body:
       description: When access should begin (e.g., 2025-12-08 08:00). Leave empty for Immediate.
     validations:
       required: false
+    visible_if:
+      - activation_type
+      - equals
+      - Scheduled
 
   - type: input
     id: end_date_time
     attributes:
       label: End Date & Time (for Scheduled only)
-      description: When access should expire (e.g., 2025-12-10 19:00). Leave empty for Immediate.
+      description: When access should expire (e.g., 2025-12-10 19:00). Maximum 4 hours from start time. Leave empty for Immediate.
     validations:
       required: false
+    visible_if:
+      - activation_type
+      - equals
+      - Scheduled
 
   - type: dropdown
     id: timezone
@@ -126,6 +106,10 @@ body:
         - WIT - Indonesia (UTC+9)
     validations:
       required: false
+    visible_if:
+      - activation_type
+      - equals
+      - Scheduled
 
   - type: textarea
     id: justification

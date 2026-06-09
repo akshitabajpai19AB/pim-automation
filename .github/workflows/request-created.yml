@@ -34,19 +34,8 @@ jobs:
               return match ? match[1].trim() : "";
             }
 
-            const principalType = getField("Principal Type");
             const email = getField("User Email");
-            const groupName = getField("Group Name or Group ID");
-            const commonGroups = getField("Common RBAC Groups (Optional)");
-            const role = getField("Azure Role");
-
-            let principalInfo = "";
-            if (principalType === "User") {
-              principalInfo = `**Principal Type:** User\n**Email:** ${email}`;
-            } else {
-              const groupId = groupName || commonGroups;
-              principalInfo = `**Principal Type:** Security Group\n**Group:** ${groupId}`;
-            }
+            const groupAssignment = getField("Group Assignment");
 
             await github.rest.issues.addAssignees({
               owner: context.repo.owner,
@@ -74,24 +63,13 @@ jobs:
               return match ? match[1].trim() : "";
             }
 
-            const principalType = getField("Principal Type");
             const email = getField("User Email");
-            const groupName = getField("Group Name or Group ID");
-            const commonGroups = getField("Common RBAC Groups (Optional)");
-            const role = getField("Azure Role");
+            const groupAssignment = getField("Group Assignment");
             const scope = getField("Scope");
-
-            let principalInfo = "";
-            if (principalType === "User") {
-              principalInfo = `**Principal Type:** User\n**Email:** ${email}`;
-            } else {
-              const groupId = groupName || commonGroups;
-              principalInfo = `**Principal Type:** Security Group\n**Group:** ${groupId}`;
-            }
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body: `@akshitabajpai19AB ✅ PIM Request Created\n\n${principalInfo}\n**Role:** ${role}\n**Scope:** ${scope}\n\nManager can approve using:\n\n/approve\n\nOR reject using:\n\n/reject`
+              body: `@akshitabajpai19AB ✅ PIM Request Created\n\n**User Email:** ${email}\n**Group Assignment:** ${groupAssignment}\n**Scope:** ${scope}\n\nManager can approve using:\n\n/approve\n\nOR reject using:\n\n/reject`
               });
