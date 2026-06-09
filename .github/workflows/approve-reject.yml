@@ -46,6 +46,10 @@ jobs:
 
             core.setOutput("scope", getField("Scope"));
             core.setOutput("role", getField("Azure Role"));
+            core.setOutput("principal_type", getField("Principal Type"));
+            core.setOutput("email", getField("User Email"));
+            core.setOutput("group_name", getField("Group Name or Group ID"));
+            core.setOutput("common_groups", getField("Common RBAC Groups (Optional)"));
             core.setOutput("activation_type", getField("Activation Type"));
             core.setOutput("start_date_time", getField("Start Date & Time (for Scheduled only)"));
             core.setOutput("end_date_time", getField("End Date & Time (for Scheduled only)"));
@@ -80,6 +84,36 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve Principal Object ID
+        id: principal
+        run: |
+          PRINCIPAL_TYPE="${{ steps.issue.outputs.principal_type }}"
+          PRINCIPAL_ID=""
+
+          if [ "$PRINCIPAL_TYPE" = "User" ]; then
+            EMAIL="${{ steps.issue.outputs.email }}"
+            PRINCIPAL_ID=$(az ad user show --id "$EMAIL" --query id -o tsv 2>/dev/null)
+            if [ -z "$PRINCIPAL_ID" ]; then
+              echo "Error: Unable to find user with email $EMAIL"
+              exit 1
+            fi
+          elif [ "$PRINCIPAL_TYPE" = "Security Group" ]; then
+            GROUP_IDENTIFIER="${{ steps.issue.outputs.group_name }}"
+            if [ -z "$GROUP_IDENTIFIER" ]; then
+              GROUP_IDENTIFIER="${{ steps.issue.outputs.common_groups }}"
+            fi
+            PRINCIPAL_ID=$(az ad group show --group "$GROUP_IDENTIFIER" --query id -o tsv 2>/dev/null)
+            if [ -z "$PRINCIPAL_ID" ]; then
+              echo "Error: Unable to find group with identifier $GROUP_IDENTIFIER"
+              exit 1
+            fi
+          else
+            echo "Error: Unknown principal type $PRINCIPAL_TYPE"
+            exit 1
+          fi
+
+          echo "PRINCIPAL_OBJECT_ID=$PRINCIPAL_ID" >> $GITHUB_ENV
 
       - name: Convert Timezone to UTC (if Scheduled)
         id: utctime
@@ -133,7 +167,7 @@ jobs:
             {
               "properties": {
                 "principalId":
-                  "${{ secrets.USER_OBJECT_ID }}",
+                  "${{ env.PRINCIPAL_OBJECT_ID }}",
 
                 "requestType":
                   "SelfActivate",
@@ -160,7 +194,7 @@ jobs:
             {
               "properties": {
                 "principalId":
-                  "${{ secrets.USER_OBJECT_ID }}",
+                  "${{ env.PRINCIPAL_OBJECT_ID }}",
 
                 "requestType":
                   "SelfActivate",
@@ -198,12 +232,14 @@ jobs:
           script: |
 
             const activationType = "${{ steps.issue.outputs.activation_type }}";
+            const principalType = "${{ steps.issue.outputs.principal_type }}";
+            const principalIdentifier = principalType === "User" ? "${{ steps.issue.outputs.email }}" : ("${{ steps.issue.outputs.group_name }}" || "${{ steps.issue.outputs.common_groups }}");
             let message = "";
 
             if (activationType === "Immediate") {
-              message = "✅ PIM Access Approved and Activated Immediately (8 hours)";
+              message = `✅ PIM Access Approved and Activated Immediately (8 hours)\n\n**Principal Type:** ${principalType}\n**Principal:** ${principalIdentifier}\n**Role:** ${{ steps.issue.outputs.role }}`;
             } else {
-              message = "✅ PIM Access Approved and Scheduled for Activation\n\nStart: ${{ steps.issue.outputs.start_date_time }}\nEnd: ${{ steps.issue.outputs.end_date_time }}\nTimezone: ${{ steps.issue.outputs.timezone }}";
+              message = `✅ PIM Access Approved and Scheduled for Activation\n\n**Principal Type:** ${principalType}\n**Principal:** ${principalIdentifier}\n**Role:** ${{ steps.issue.outputs.role }}\n\n**Start:** ${{ steps.issue.outputs.start_date_time }}\n**End:** ${{ steps.issue.outputs.end_date_time }}\n**Timezone:** ${{ steps.issue.outputs.timezone }}`;
             }
 
             await github.rest.issues.createComment({
