@@ -71,31 +71,23 @@ body:
     id: start_date_time
     attributes:
       label: Start Date & Time (for Scheduled only)
-      description: When access should begin (e.g., 2025-12-08 08:00). Leave empty for Immediate.
+      description: When access should begin (e.g., 2025-12-08 08:00). Only required if Activation Type is 'Scheduled'. Leave empty for Immediate.
     validations:
       required: false
-    visible_if:
-      - activation_type
-      - equals
-      - Scheduled
 
   - type: input
     id: end_date_time
     attributes:
       label: End Date & Time (for Scheduled only)
-      description: When access should expire (e.g., 2025-12-10 19:00). Maximum 4 hours from start time. Leave empty for Immediate.
+      description: When access should expire (e.g., 2025-12-10 19:00). Maximum 4 hours from start time. Only required if Activation Type is 'Scheduled'. Leave empty for Immediate.
     validations:
       required: false
-    visible_if:
-      - activation_type
-      - equals
-      - Scheduled
 
   - type: dropdown
     id: timezone
     attributes:
       label: Timezone (for Scheduled only)
-      description: Select your timezone (required for Scheduled only)
+      description: Select your timezone. Only required if Activation Type is 'Scheduled'.
       options:
         - IST (UTC+5:30)
         - WIB - Indonesia (UTC+7)
@@ -106,10 +98,6 @@ body:
         - WIT - Indonesia (UTC+9)
     validations:
       required: false
-    visible_if:
-      - activation_type
-      - equals
-      - Scheduled
 
   - type: textarea
     id: justification
