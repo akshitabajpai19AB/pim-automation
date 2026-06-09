@@ -52,6 +52,25 @@ jobs:
             core.setOutput("end_date_time", getField("End Date & Time (for Scheduled only)"));
             core.setOutput("timezone", getField("Timezone (for Scheduled only)"));
 
+      - name: Validate Activation Type Fields
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const activationType = "${{ steps.issue.outputs.activation_type }}";
+            const startDateTime = "${{ steps.issue.outputs.start_date_time }}";
+            const endDateTime = "${{ steps.issue.outputs.end_date_time }}";
+            const timezone = "${{ steps.issue.outputs.timezone }}";
+
+            if (activationType === "Immediate") {
+              if (startDateTime.trim() !== "" || endDateTime.trim() !== "" || timezone.trim() !== "") {
+                core.setFailed(`❌ Error: For 'Immediate' activation type, do NOT fill in Start Date/Time, End Date/Time, or Timezone fields. These fields must be left empty for Immediate activation.`);
+              }
+            } else if (activationType === "Scheduled") {
+              if (startDateTime.trim() === "" || endDateTime.trim() === "" || timezone.trim() === "") {
+                core.setFailed(`❌ Error: For 'Scheduled' activation type, you MUST fill in all three fields: Start Date & Time, End Date & Time, and Timezone. Please reopen the issue and provide these details.`);
+              }
+            }
+
       - name: Check User Request Limit
         id: requestlimit
         uses: actions/github-script@v7
